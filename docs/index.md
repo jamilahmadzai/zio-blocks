@@ -53,7 +53,7 @@ libraryDependencies += "dev.zio" %% "zio-blocks-config-hocon" % "@VERSION@"
 ### Quick Start: StaticFlag
 
 ```scala
-import zio.blocks.config.*
+import zio.blocks.config._
 
 object poolSize extends StaticFlag[Int](10)
 
@@ -62,13 +62,16 @@ val size: Int = poolSize()
 
 ### Quick Start: Config.load[A]
 
+> **Scala 3**: The `given` and `object Foo:` syntax below require Scala 3. For Scala 2.13, replace `given Schema[AppConfig] = Schema.derived` with `implicit val schema: Schema[AppConfig] = Schema.derived` and `object AppConfig:` with `object AppConfig {`.
+
 ```scala
-import zio.blocks.config.*
+import zio.blocks.config._
 import zio.blocks.schema.Schema
 
 final case class AppConfig(host: String, port: Int)
-object AppConfig:
-  given Schema[AppConfig] = Schema.derived
+object AppConfig {
+  implicit val schema: Schema[AppConfig] = Schema.derived[AppConfig]
+}
 
 val cfg = Config.load[AppConfig](ConfigSource.fromMap(Map("host" -> "localhost", "port" -> "8080")))
 ```
@@ -76,7 +79,7 @@ val cfg = Config.load[AppConfig](ConfigSource.fromMap(Map("host" -> "localhost",
 ### Example: FlagProvider Plugin
 
 ```scala
-import zio.blocks.config.*
+import zio.blocks.config._
 
 val provider = FlagProvider.fromMap(Map("myapp.pool.size" -> "20"), "demo")
 FlagProvider.Registry.register(provider)
@@ -87,16 +90,19 @@ val size = poolSize()
 
 ### Example: ConfigSource Composition with Provenance
 
+> **Scala 3**: The `given` and `object Foo:` syntax below require Scala 3. See the note in the Config.load section for Scala 2.13 equivalents.
+
 ```scala
-import zio.blocks.config.*
+import zio.blocks.config._
 
 val defaults = ConfigSource.fromMap(Map("app.host" -> "localhost"), "defaults")
 val env      = ConfigSource.fromMap(Map("app.port" -> "8080"), "env")
 val source   = env.orElse(defaults)
 
 final case class AppConfig(host: String, port: Int)
-object AppConfig:
-  given zio.blocks.schema.Schema[AppConfig] = zio.blocks.schema.Schema.derived
+object AppConfig {
+  implicit val schema: zio.blocks.schema.Schema[AppConfig] = zio.blocks.schema.Schema.derived[AppConfig]
+}
 
 val loaded   = Config.loadWithProvenance[AppConfig](source)
 val hostProv  = loaded.map(_.provenanceOf("host"))
@@ -105,7 +111,7 @@ val hostProv  = loaded.map(_.provenanceOf("host"))
 ### Example: Rollout DSL
 
 ```scala
-import zio.blocks.config.*
+import zio.blocks.config._
 
 val bucket = Rollout.bucketFor("user-123")
 val choice = Rollout.select("true@prod/50%;false", "prod", bucket)

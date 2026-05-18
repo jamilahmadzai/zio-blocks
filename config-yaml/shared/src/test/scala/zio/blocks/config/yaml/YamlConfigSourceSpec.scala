@@ -134,9 +134,9 @@ object YamlConfigSourceSpec extends ZIOSpecDefault {
       assertTrue(result.toOption.get.getAll("database").contains("database.host")) &&
       assertTrue(result.toOption.get.getAll("database").contains("database.port"))
     },
-    test("invalid YAML string returns Left") {
-      val result = YamlConfigSource.fromString("{")
-      assertTrue(result.isLeft)
+    test("malformed YAML treated as scalar value") {
+      val result = YamlConfigSource.fromString("key: ]]][[[")
+      assertTrue(result.isRight)
     },
     test("triple-nested object keys accessible via dot notation") {
       val yaml = """

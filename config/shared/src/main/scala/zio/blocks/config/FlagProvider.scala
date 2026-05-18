@@ -17,6 +17,7 @@
 package zio.blocks.config
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import scala.jdk.CollectionConverters._
 
 /**
@@ -65,27 +66,42 @@ trait FlagProvider {
 object FlagProvider {
 
   /**
-   * Global registry of FlagProvider instances. Thread-safe via
-   * ConcurrentHashMap.
+   * Global registry of FlagProvider instances. Thread-safe. Providers are
+   * iterated in registration order so that the first-registered provider wins
+   * when multiple providers resolve the same flag name.
    */
   object Registry {
-    private val providers: ConcurrentHashMap[String, FlagProvider] = new ConcurrentHashMap[String, FlagProvider]()
+    private val byId: ConcurrentHashMap[String, FlagProvider] = new ConcurrentHashMap[String, FlagProvider]()
+    private val ordered: CopyOnWriteArrayList[FlagProvider]   = new CopyOnWriteArrayList[FlagProvider]()
 
-    def register(provider: FlagProvider): Unit =
-      providers.put(provider.providerId, provider)
+    def register(provider: FlagProvider): Unit = {
+      val existing = byId.putIfAbsent(provider.providerId, provider)
+      if (existing == null) ordered.add(provider)
+      else {
+        byId.put(provider.providerId, provider)
+        val idx = ordered.indexOf(existing)
+        if (idx >= 0) ordered.set(idx, provider)
+        else ordered.add(provider)
+      }
+    }
 
-    def unregister(providerId: String): Unit =
-      providers.remove(providerId)
+    def unregister(providerId: String): Unit = {
+      val removed = byId.remove(providerId)
+      if (removed != null) ordered.remove(removed)
+    }
 
     def get(providerId: String): Option[FlagProvider] =
-      Option(providers.get(providerId))
+      Option(byId.get(providerId))
 
     def all: Seq[FlagProvider] =
-      providers.values().asScala.toSeq
+      ordered.asScala.toSeq
 
-    /** Resolve a flag name across all registered providers. First Some wins. */
+    /**
+     * Resolve a flag name across all registered providers in registration
+     * order. First Some wins.
+     */
     def resolve(flagName: String): Option[(String, String)] = {
-      val iter = providers.values().iterator()
+      val iter = ordered.iterator()
       while (iter.hasNext) {
         val p = iter.next()
         p.resolve(flagName) match {
@@ -97,8 +113,10 @@ object FlagProvider {
     }
 
     /** Clear all registered providers (for testing). */
-    def clear(): Unit =
-      providers.clear()
+    def clear(): Unit = {
+      byId.clear()
+      ordered.clear()
+    }
   }
 
   /**

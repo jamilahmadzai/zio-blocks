@@ -17,6 +17,7 @@
 package zio.blocks.config
 
 import zio.test._
+import zio.test.TestAspect
 
 object StaticFlagSpec extends ConfigBaseSpec {
 
@@ -101,31 +102,30 @@ object StaticFlagSpec extends ConfigBaseSpec {
       }
     ),
     suite("fail-fast")(
-      test("throws on unparseable system property") {
+      test("throws ExceptionInInitializerError wrapping FlagValueParseException on unparseable system property") {
         val flagName = "test.badparse.flag"
         val envName  = "TEST_BADPARSE_FLAG"
         System.setProperty(flagName, "not-a-number")
-        try {
-          val threw = try {
+        val result =
+          try {
             StaticFlag.resolve[Int](flagName, envName, 0, Flag.Reader.intReader)
-            false
+            Left("should have thrown")
           } catch {
-            case _: Throwable => true
+            case e: ExceptionInInitializerError => Right(e)
+          } finally {
+            System.clearProperty(flagName)
           }
-          assertTrue(threw)
-        } finally {
-          System.clearProperty(flagName)
-        }
+        assertTrue(result.isRight) &&
+        assertTrue(result.toOption.get.getCause.isInstanceOf[FlagException.FlagValueParseException])
       }
     ),
     suite("validation")(
-      test("rejects non-object usage via class name check") {
-        val result = scala.util.Try {
-          StaticFlag.deriveName(classOf[String])
-        }
+      test("rejects non-object usage with FlagNameException") {
+        val result = scala.util.Try(StaticFlag.deriveName(classOf[String]))
         assertTrue(result.isFailure) &&
+        assertTrue(result.failed.get.isInstanceOf[FlagException.FlagNameException]) &&
         assertTrue(result.failed.get.getMessage.contains("Scala object"))
       }
     )
-  )
+  ) @@ TestAspect.sequential
 }

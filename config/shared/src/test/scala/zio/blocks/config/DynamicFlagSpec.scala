@@ -194,22 +194,23 @@ object DynamicFlagSpec extends ConfigBaseSpec {
       }
     ) @@ TestAspect.sequential,
     suite("fail-fast at init")(
-      test("throws on invalid default expression") {
-        val threw = try {
-          DynamicFlag.initSnapshot("test", "", 0, Flag.Reader.intReader)
-          false
-        } catch {
-          case _: Throwable => true
-        }
-        assertTrue(threw)
+      test("throws ExceptionInInitializerError wrapping FlagExpressionParseException on invalid default expression") {
+        val result =
+          try {
+            DynamicFlag.initSnapshot("test", "", 0, Flag.Reader.intReader)
+            Left("should have thrown")
+          } catch {
+            case e: ExceptionInInitializerError => Right(e)
+          }
+        assertTrue(result.isRight) &&
+        assertTrue(result.toOption.get.getCause.isInstanceOf[FlagException.FlagExpressionParseException])
       }
     ),
     suite("validation")(
-      test("rejects non-object usage") {
-        val result = scala.util.Try {
-          DynamicFlag.deriveName(classOf[String])
-        }
+      test("rejects non-object usage with FlagNameException") {
+        val result = scala.util.Try(DynamicFlag.deriveName(classOf[String]))
         assertTrue(result.isFailure) &&
+        assertTrue(result.failed.get.isInstanceOf[FlagException.FlagNameException]) &&
         assertTrue(result.failed.get.getMessage.contains("Scala object"))
       }
     )
